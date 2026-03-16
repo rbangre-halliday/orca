@@ -64,6 +64,7 @@ struct SidebarCallbacks {
     var onDelete: ((UUID) -> Void)?
     var onMove: ((UUID, UUID?, Int) -> Void)?
     var onReturnFocus: (() -> Void)?
+    var onClearWorkspace: (() -> Void)?
 }
 
 // MARK: - Custom Row View
@@ -538,6 +539,10 @@ extension SidebarController: NSMenuDelegate {
         } else {
             menu.addItem(withTitle: "New Terminal", action: #selector(contextNewTerminalRoot(_:)), keyEquivalent: "")
             menu.addItem(withTitle: "New Folder", action: #selector(contextNewFolderRoot(_:)), keyEquivalent: "")
+            menu.addItem(.separator())
+            let clearItem = NSMenuItem(title: "Clear Workspace", action: #selector(contextClearWorkspace(_:)), keyEquivalent: "")
+            clearItem.attributedTitle = NSAttributedString(string: "Clear Workspace", attributes: [.foregroundColor: NSColor.systemOrange])
+            menu.addItem(clearItem)
         }
         for item in menu.items { item.target = self }
     }
@@ -560,6 +565,7 @@ extension SidebarController: NSMenuDelegate {
     }
     @objc private func contextNewTerminalRoot(_ sender: Any?) { callbacks.onAddTerminal?(nil) }
     @objc private func contextNewFolderRoot(_ sender: Any?) { callbacks.onAddFolder?(nil) }
+    @objc private func contextClearWorkspace(_ sender: Any?) { callbacks.onClearWorkspace?() }
 }
 
 // MARK: - Editable Text Field

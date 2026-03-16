@@ -35,8 +35,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         splitView.autoresizingMask = [.width, .height]
         splitView.delegate = self
 
-        // Workspace store
-        store = WorkspaceStore()
+        // Workspace store (per-directory persistence)
+        let workspaceDir = TerminalManager.initialDirectory()
+        FileManager.default.changeCurrentDirectoryPath(workspaceDir)
+        store = WorkspaceStore(directory: workspaceDir)
 
         // Sidebar (NSOutlineView)
         sidebarController = SidebarController(store: store)
@@ -90,6 +92,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onReturnFocus: { [weak self] in
                 self?.terminalManager.focusTerminal()
+            },
+            onClearWorkspace: { [weak self] in
+                self?.terminalManager.clearWorkspace()
             }
         )
         sidebarController.outlineView.callbacks = sidebarController.callbacks
@@ -157,6 +162,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         shellMenu.addItem(withTitle: "Close Terminal", action: #selector(closeTerminal(_:)), keyEquivalent: "w")
         shellMenu.addItem(.separator())
         shellMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebarPanel(_:)), keyEquivalent: "e")
+        shellMenu.addItem(.separator())
+        let clearItem = NSMenuItem(title: "Clear Workspace", action: #selector(clearWorkspace(_:)), keyEquivalent: "k")
+        clearItem.keyEquivalentModifierMask = [.command, .shift]
+        shellMenu.addItem(clearItem)
         shellMenuItem.submenu = shellMenu
         mainMenu.addItem(shellMenuItem)
 
@@ -245,6 +254,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func focusTerminal(_ sender: Any?) {
         terminalManager.focusTerminal()
+    }
+
+    @objc private func clearWorkspace(_ sender: Any?) {
+        terminalManager.clearWorkspace()
     }
 
     @objc private func toggleSidebarPanel(_ sender: Any?) {

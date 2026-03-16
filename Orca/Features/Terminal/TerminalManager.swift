@@ -1,4 +1,5 @@
 import Cocoa
+import GhosttyKit
 
 /// Manages TerminalView lifecycles, backed by WorkspaceStore for persistence.
 class TerminalManager {
@@ -47,6 +48,7 @@ class TerminalManager {
             return
         }
 
+        // Restore live terminals (create fresh shells)
         for tid in terminalIDs {
             createLiveTerminal(for: tid)
         }
@@ -78,7 +80,6 @@ class TerminalManager {
 
         view.onTitleChange = { [weak self] title in
             guard let self else { return }
-            // Clean up the title — use last path component or process name
             let label = Self.cleanTitle(title)
             if !label.isEmpty {
                 self.store.rename(id: id, to: label)
@@ -97,12 +98,12 @@ class TerminalManager {
     }
 
     func closeTerminal(id: UUID) {
-        let allIDs = store.tree.allTerminalIDsInOrder
+        let liveIDs = store.tree.allTerminalIDsInOrder
         let isActive = id == activeID
 
         var nextID: UUID?
-        if isActive, allIDs.count > 1, let idx = allIDs.firstIndex(of: id) {
-            nextID = idx + 1 < allIDs.count ? allIDs[idx + 1] : allIDs[idx - 1]
+        if isActive, liveIDs.count > 1, let idx = liveIDs.firstIndex(of: id) {
+            nextID = idx + 1 < liveIDs.count ? liveIDs[idx + 1] : liveIDs[idx - 1]
         } else if !isActive {
             nextID = activeID
         }
@@ -125,13 +126,10 @@ class TerminalManager {
         }
     }
 
-    /// Delete a node — if folder, close all contained terminals.
     func deleteNode(id: UUID) {
         guard let node = store.tree.find(id: id) else { return }
 
         if case .folder = node {
-            let terminalIDs = store.tree.allTerminalIDsInOrder
-            // Collect terminal IDs inside this folder
             var toRemove: [UUID] = []
             func collect(_ n: WorkspaceNode) {
                 switch n {
@@ -169,9 +167,23 @@ class TerminalManager {
         }
     }
 
+    /// Clear entire workspace and start fresh.
+    func clearWorkspace() {
+        for (_, view) in liveTerminals {
+            view.removeFromSuperview()
+        }
+        liveTerminals.removeAll()
+        activeID = nil
+        store.clearWorkspace()
+
+        let cwd = store.workspaceDir
+        let folderName = (cwd as NSString).lastPathComponent
+        let folderID = store.addFolder(label: folderName)
+        createTerminal(inFolder: folderID)
+    }
+
     // MARK: - Switch
 
-    /// Switch the displayed terminal. Does NOT steal focus — call `focusTerminal()` separately.
     func switchTo(id: UUID) {
         guard id != activeID else { return }
         guard let view = liveTerminals[id] else { return }
@@ -191,7 +203,6 @@ class TerminalManager {
         onChange?()
     }
 
-    /// Give keyboard focus to the active terminal.
     func focusTerminal() {
         if let view = activeTerminal {
             window?.makeFirstResponder(view)
@@ -221,9 +232,7 @@ class TerminalManager {
 
     // MARK: - Initial Directory
 
-    /// Determine the initial working directory: CLI arg > PWD env > cwd > home.
     static func initialDirectory() -> String {
-        // 1. Command line argument: `orca /path/to/dir`
         let args = ProcessInfo.processInfo.arguments
         if args.count > 1 {
             let candidate = args[1]
@@ -233,70 +242,49 @@ class TerminalManager {
             }
         }
 
-        // 2. PWD environment variable (set by the shell)
         if let pwd = ProcessInfo.processInfo.environment["PWD"],
            pwd != "/",
            FileManager.default.fileExists(atPath: pwd) {
             return pwd
         }
 
-        // 3. Actual cwd if it's not root
         let cwd = FileManager.default.currentDirectoryPath
-        if cwd != "/" {
-            return cwd
-        }
+        if cwd != "/" { return cwd }
 
-        // 4. Fall back to home
         return FileManager.default.homeDirectoryForCurrentUser.path
     }
 
     // MARK: - Title Cleaning
 
-    /// Clean a shell title into a concise label.
     private static func cleanTitle(_ raw: String) -> String {
         var title = raw.trimmingCharacters(in: .whitespaces)
         if title.isEmpty { return "terminal" }
 
-        // Shell names → "terminal"
         let shells: Set = ["zsh", "bash", "fish", "sh", "dash", "-zsh", "-bash", "-fish"]
         if shells.contains(title.lowercased()) { return "terminal" }
 
         let home = FileManager.default.homeDirectoryForCurrentUser.path
 
-        // Strip user@host prefix in any format (with ": ", ":", or " ")
         if title.contains("@") {
-            // Try "user@host: rest"
             if let range = title.range(of: ": ") {
                 title = String(title[range.upperBound...])
-            }
-            // Try "user@host:rest"
-            else if let range = title.range(of: ":") {
+            } else if let range = title.range(of: ":") {
                 let afterColon = String(title[range.upperBound...])
-                if afterColon.hasPrefix("/") || afterColon.hasPrefix("~") {
-                    title = afterColon
-                }
-            }
-            // Try "user@host rest"
-            else if let range = title.range(of: " ") {
+                if afterColon.hasPrefix("/") || afterColon.hasPrefix("~") { title = afterColon }
+            } else if let range = title.range(of: " ") {
                 title = String(title[range.upperBound...])
             }
         }
 
-        // Replace home path with ~
         title = title.replacingOccurrences(of: home, with: "~")
 
-        // If it contains a path separator, extract last meaningful component
         if title.contains("/") {
-            // Remove trailing slash
             while title.hasSuffix("/") && title.count > 1 { title.removeLast() }
             let last = (title as NSString).lastPathComponent
-            if !last.isEmpty && last != "/" && last != "~" {
-                return last
-            }
+            if !last.isEmpty && last != "/" && last != "~" { return last }
             if title == "~" || title == "/" { return "~" }
         }
 
-        // Check if what remains is still a shell name
         if shells.contains(title.lowercased()) { return "terminal" }
 
         return title

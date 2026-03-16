@@ -32,6 +32,9 @@ class TerminalView: NSView, NSTextInputClient {
         wantsLayer = true
         layer?.isOpaque = true
         updateTrackingArea()
+
+        // Accept file drops
+        registerForDraggedTypes([.fileURL, .string])
     }
 
     required init?(coder: NSCoder) {
@@ -40,6 +43,77 @@ class TerminalView: NSView, NSTextInputClient {
 
     deinit {
         if let surface { ghostty_surface_free(surface) }
+    }
+
+    // MARK: - Copy / Paste
+
+    @objc func copy(_ sender: Any?) {
+        guard let surface else { return }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return }
+        defer { ghostty_surface_free_text(surface, &text) }
+        if let ptr = text.text, text.text_len > 0 {
+            let str = String(cString: ptr)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(str, forType: .string)
+        }
+    }
+
+    @objc func paste(_ sender: Any?) {
+        guard let surface else { return }
+        guard let str = NSPasteboard.general.string(forType: .string) else { return }
+        str.withCString { ptr in
+            ghostty_surface_text(surface, ptr, UInt(str.utf8.count))
+        }
+    }
+
+    @objc override func selectAll(_ sender: Any?) {
+        // Let ghostty handle select all via its binding
+        guard let surface else { return }
+        _ = ghostty_surface_binding_action(surface, "select_all", 10)
+    }
+
+    // MARK: - Drag and Drop (files into terminal)
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
+            return .copy
+        }
+        if sender.draggingPasteboard.canReadObject(forClasses: [NSString.self], options: nil) {
+            return .copy
+        }
+        return []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let surface else { return false }
+
+        // Try file URLs first — insert escaped paths
+        if let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            let paths = urls.map { path -> String in
+                // Escape spaces and special chars for shell
+                path.path.replacingOccurrences(of: " ", with: "\\ ")
+                    .replacingOccurrences(of: "(", with: "\\(")
+                    .replacingOccurrences(of: ")", with: "\\)")
+                    .replacingOccurrences(of: "'", with: "\\'")
+            }
+            let text = paths.joined(separator: " ")
+            text.withCString { ptr in
+                ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+            }
+            return true
+        }
+
+        // Fall back to string content
+        if let strings = sender.draggingPasteboard.readObjects(forClasses: [NSString.self], options: nil) as? [String], !strings.isEmpty {
+            let text = strings.joined()
+            text.withCString { ptr in
+                ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+            }
+            return true
+        }
+
+        return false
     }
 
     // MARK: - View Lifecycle
