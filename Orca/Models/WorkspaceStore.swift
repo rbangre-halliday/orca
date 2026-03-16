@@ -47,8 +47,8 @@ class WorkspaceStore: ObservableObject {
         return removed
     }
 
-    func rename(id: UUID, to label: String) {
-        tree.rename(id: id, to: label)
+    func rename(id: UUID, to label: String, manual: Bool = false) {
+        tree.rename(id: id, to: label, manual: manual)
         save()
     }
 

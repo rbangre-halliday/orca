@@ -34,18 +34,29 @@ xcodebuild -scheme Orca -configuration Debug build
 
 Or open `Orca.xcodeproj` in Xcode and hit Cmd+R.
 
+### Download (no build required)
+
+Grab the latest release from [Releases](https://github.com/rbangre-halliday/orca/releases), unzip, and move `Orca.app` to `/Applications`.
+
+First launch — macOS will block it:
+```bash
+xattr -cr /Applications/Orca.app
+```
+
 ### Run
 
 ```bash
-# Run from a specific directory (the folder name becomes your root workspace)
-cd ~/projects/myapp
-/path/to/DerivedData/Orca-*/Build/Products/Debug/Orca.app/Contents/MacOS/Orca
+cd ~/projects/myapp && /Applications/Orca.app/Contents/MacOS/Orca
 ```
 
-Tip: add an alias to your `.zshrc`:
+Add these aliases to your `.zshrc`:
 
 ```bash
-alias orca='/path/to/DerivedData/Orca-*/Build/Products/Debug/Orca.app/Contents/MacOS/Orca'
+# Run orca from any directory
+alias orca='/Applications/Orca.app/Contents/MacOS/Orca'
+
+# Upgrade to latest release
+alias orca-upgrade='cd /tmp && gh release download --repo rbangre-halliday/orca --pattern "*.zip" --clobber && unzip -o Orca-macos-arm64.zip -d /Applications && xattr -cr /Applications/Orca.app && echo "Orca upgraded"'
 ```
 
 Then just `cd ~/projects/myapp && orca`.

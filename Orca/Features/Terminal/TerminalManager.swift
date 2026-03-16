@@ -80,6 +80,8 @@ class TerminalManager {
 
         view.onTitleChange = { [weak self] title in
             guard let self else { return }
+            // Don't overwrite manually renamed terminals
+            guard !self.store.tree.isManuallyRenamed(id: id) else { return }
             let label = Self.cleanTitle(title)
             if !label.isEmpty {
                 self.store.rename(id: id, to: label)

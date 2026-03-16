@@ -5,10 +5,12 @@ import Foundation
 struct TerminalNodeData: Identifiable, Codable {
     let id: UUID
     var label: String
+    var isManuallyRenamed: Bool
 
-    init(id: UUID = UUID(), label: String) {
+    init(id: UUID = UUID(), label: String, isManuallyRenamed: Bool = false) {
         self.id = id
         self.label = label
+        self.isManuallyRenamed = isManuallyRenamed
     }
 }
 
@@ -269,11 +271,16 @@ struct WorkspaceTree: Codable {
         return removedTerminalIDs
     }
 
-    mutating func rename(id: UUID, to label: String) {
+    mutating func rename(id: UUID, to label: String, manual: Bool = false) {
         func update(_ nodes: inout [WorkspaceNode]) -> Bool {
             for i in nodes.indices {
                 if nodes[i].id == id {
                     nodes[i].label = label
+                    if manual, case .terminal(var d) = nodes[i] {
+                        d.label = label
+                        d.isManuallyRenamed = true
+                        nodes[i] = .terminal(d)
+                    }
                     return true
                 }
                 if case .folder(var d) = nodes[i] {
@@ -286,6 +293,11 @@ struct WorkspaceTree: Codable {
             return false
         }
         _ = update(&roots)
+    }
+
+    func isManuallyRenamed(id: UUID) -> Bool {
+        if case .terminal(let d) = find(id: id) { return d.isManuallyRenamed }
+        return false
     }
 
     /// Move a node to a new parent at a specific index. `toParent` nil means root.

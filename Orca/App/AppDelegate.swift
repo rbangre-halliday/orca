@@ -80,7 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.terminalManager.switchTo(id: id)
             },
             onRename: { [weak self] id, name in
-                self?.store.rename(id: id, to: name)
+                self?.store.rename(id: id, to: name, manual: true)
                 self?.terminalManager.onChange?()
             },
             onAddTerminal: { [weak self] folderID in
