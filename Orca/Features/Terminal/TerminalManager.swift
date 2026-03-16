@@ -115,7 +115,6 @@ class TerminalManager {
         if liveTerminals.isEmpty {
             activeID = nil
             onChange?()
-            NSApp.terminate(nil)
             return
         }
 
@@ -154,7 +153,6 @@ class TerminalManager {
             if liveTerminals.isEmpty {
                 activeID = nil
                 onChange?()
-                NSApp.terminate(nil)
                 return
             }
 

@@ -6,8 +6,9 @@ private enum SidebarStyle {
     static let bgColor = NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1.0)
     static let rowHeight: CGFloat = 32
     static let accentColor = NSColor(red: 0.55, green: 0.47, blue: 1.0, alpha: 1.0)
-    static let selectedColor = NSColor(white: 1.0, alpha: 0.10)
-    static let focusedSelectedColor = NSColor(red: 0.55, green: 0.47, blue: 1.0, alpha: 0.18)
+    static let selectedColor = NSColor(white: 1.0, alpha: 0.05)
+    static let focusedSelectedColor = NSColor(red: 0.55, green: 0.47, blue: 1.0, alpha: 0.25)
+    static let focusBorderColor = NSColor(red: 0.55, green: 0.47, blue: 1.0, alpha: 0.5)
     static let textColor = NSColor(white: 0.75, alpha: 1.0)
     static let textDim = NSColor(white: 0.42, alpha: 1.0)
     static let textActive = NSColor(white: 0.97, alpha: 1.0)
@@ -117,6 +118,18 @@ class SidebarOutlineView: NSOutlineView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        needsDisplay = true
+        return result
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let result = super.resignFirstResponder()
+        needsDisplay = true
+        return result
+    }
+
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 0x24, 0x4C: // Return / numpad Enter
@@ -180,6 +193,13 @@ class SidebarOutlineView: NSOutlineView {
     override func drawBackground(inClipRect clipRect: NSRect) {
         SidebarStyle.bgColor.setFill()
         clipRect.fill()
+
+        // Draw a thin accent line on the right edge when sidebar is focused
+        if window?.firstResponder === self {
+            let lineRect = NSRect(x: bounds.maxX - 1.5, y: clipRect.minY, width: 1.5, height: clipRect.height)
+            SidebarStyle.focusBorderColor.setFill()
+            lineRect.fill()
+        }
     }
 
     override func frameOfOutlineCell(atRow row: Int) -> NSRect {
