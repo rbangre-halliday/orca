@@ -158,7 +158,7 @@ class SidebarOutlineView: NSOutlineView {
                 expandItem(item)
             }
 
-        case 0x22: // h — collapse folder or go to parent (vim left)
+        case 0x04: // h — collapse folder or go to parent (vim left)
             let row = selectedRow
             if row >= 0, let item = self.item(atRow: row) as? NodeItem {
                 if item.node.isFolder && isItemExpanded(item) {
