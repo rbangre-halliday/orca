@@ -175,6 +175,12 @@ class SidebarOutlineView: NSOutlineView {
             guard row >= 0 else { return }
             editColumn(0, row: row, with: nil, select: true)
 
+        case 0x1E where event.modifierFlags.contains(.shift): // } — next folder
+            jumpToFolder(direction: 1)
+
+        case 0x21 where event.modifierFlags.contains(.shift): // { — previous folder
+            jumpToFolder(direction: -1)
+
         case 0x33, 0x75: // Backspace or Forward Delete — delete selected item
             let row = selectedRow
             guard row >= 0, let item = self.item(atRow: row) as? NodeItem else { return }
@@ -188,6 +194,23 @@ class SidebarOutlineView: NSOutlineView {
 
         default:
             super.keyDown(with: event)
+        }
+    }
+
+    private func jumpToFolder(direction: Int) {
+        let current = selectedRow
+        var row = current
+        let total = numberOfRows
+        guard total > 0 else { return }
+
+        // Scan in direction until we find a folder row
+        for _ in 0..<total {
+            row = (row + direction + total) % total
+            if let item = self.item(atRow: row) as? NodeItem, item.node.isFolder {
+                selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                scrollRowToVisible(row)
+                return
+            }
         }
     }
 
