@@ -74,13 +74,13 @@ class SidebarRowView: NSTableRowView {
     var nodeDepth: Int = 0
 
     override func drawSelection(in dirtyRect: NSRect) {
+        // Only draw selection highlight when the sidebar is focused (keyboard nav)
+        let isFocused = (window?.firstResponder as? NSView)?.isDescendant(of: superview ?? self) ?? false
+        guard isFocused else { return }
+
         let selRect = bounds.insetBy(dx: 5, dy: 1)
         let path = NSBezierPath(roundedRect: selRect, xRadius: 5, yRadius: 5)
-
-        // Brighter selection when the outline view is first responder (focused)
-        let isFocused = (window?.firstResponder as? NSView)?.isDescendant(of: superview ?? self) ?? false
-        let color = isFocused ? SidebarStyle.focusedSelectedColor : SidebarStyle.selectedColor
-        color.setFill()
+        SidebarStyle.focusedSelectedColor.setFill()
         path.fill()
     }
 

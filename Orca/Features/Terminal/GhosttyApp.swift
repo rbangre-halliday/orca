@@ -106,6 +106,47 @@ class GhosttyApp {
             }
             return true
 
+        case GHOSTTY_ACTION_START_SEARCH:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface) {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                let needle = action.action.start_search.needle.map { String(cString: $0) }
+                DispatchQueue.main.async {
+                    view.showSearch(needle: needle)
+                }
+            }
+            return true
+
+        case GHOSTTY_ACTION_END_SEARCH:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface) {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                DispatchQueue.main.async { view.hideSearch() }
+            }
+            return true
+
+        case GHOSTTY_ACTION_SEARCH_TOTAL:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface) {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                let total = Int(action.action.search_total.total)
+                DispatchQueue.main.async {
+                    view.updateSearchCounts(total: total >= 0 ? total : nil, selected: nil)
+                }
+            }
+            return true
+
+        case GHOSTTY_ACTION_SEARCH_SELECTED:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface) {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                let selected = Int(action.action.search_selected.selected)
+                DispatchQueue.main.async {
+                    view.updateSearchCounts(total: nil, selected: selected >= 0 ? selected : nil)
+                }
+            }
+            return true
+
         case GHOSTTY_ACTION_CLOSE_WINDOW, GHOSTTY_ACTION_QUIT:
             DispatchQueue.main.async {
                 NSApp.terminate(nil)

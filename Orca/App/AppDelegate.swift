@@ -8,8 +8,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var sidebarController: SidebarController!
     private var splitView: NSSplitView!
     private var sidebarView: NSView!
+    private var windowContainer: NSView!
     private var sidebarWidth: CGFloat = 220
     private var sidebarVisible = true
+    private var quickSwitcher: QuickSwitcherOverlay?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ghosttyApp = GhosttyApp()
@@ -52,7 +54,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
         splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
 
-        window.contentView = splitView
+        // Wrapper so overlays (quick switcher) sit above the split view
+        windowContainer = NSView()
+        windowContainer.autoresizingMask = [.width, .height]
+        splitView.frame = windowContainer.bounds
+        windowContainer.addSubview(splitView)
+        window.contentView = windowContainer
         splitView.setPosition(220, ofDividerAt: 0)
 
         // Terminal manager
@@ -172,6 +179,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // View menu
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Quick Switcher", action: #selector(showQuickSwitcher(_:)), keyEquivalent: "p")
+        viewMenu.addItem(.separator())
         viewMenu.addItem(withTitle: "Focus Sidebar", action: #selector(focusSidebar(_:)), keyEquivalent: "1")
         viewMenu.addItem(withTitle: "Focus Terminal", action: #selector(focusTerminal(_:)), keyEquivalent: "2")
         viewMenuItem.submenu = viewMenu
@@ -183,6 +192,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Find...", action: #selector(findInTerminal(_:)), keyEquivalent: "f")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
@@ -254,6 +265,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func focusTerminal(_ sender: Any?) {
         terminalManager.focusTerminal()
+    }
+
+    @objc private func showQuickSwitcher(_ sender: Any?) {
+        if let qs = quickSwitcher, !qs.isHidden {
+            qs.dismiss()
+            return
+        }
+
+        // Build items from workspace tree
+        var items: [QuickSwitcherItem] = []
+        func walk(_ nodes: [WorkspaceNode], breadcrumb: String) {
+            for node in nodes {
+                switch node {
+                case .terminal(let d):
+                    items.append(QuickSwitcherItem(id: d.id, label: d.label, breadcrumb: breadcrumb, isFolder: false))
+                case .folder(let d):
+                    let path = breadcrumb.isEmpty ? d.label : "\(breadcrumb) › \(d.label)"
+                    walk(d.children, breadcrumb: path)
+                }
+            }
+        }
+        walk(store.tree.roots, breadcrumb: "")
+
+        if quickSwitcher == nil {
+            let qs = QuickSwitcherOverlay(frame: window.contentView!.bounds)
+            qs.autoresizingMask = [.width, .height]
+            qs.onSelect = { [weak self] id in
+                self?.terminalManager.switchTo(id: id)
+                self?.terminalManager.focusTerminal()
+                if let activeID = self?.store.tree.activeTerminalID {
+                    self?.sidebarController.selectNode(id: activeID)
+                }
+            }
+            qs.onDismiss = { [weak self] in
+                self?.terminalManager.focusTerminal()
+            }
+            quickSwitcher = qs
+        }
+
+        // Add on top of the split view
+        let qs = quickSwitcher!
+        qs.frame = windowContainer.bounds
+        windowContainer.addSubview(qs, positioned: .above, relativeTo: nil)
+        qs.show(items: items)
+    }
+
+    @objc private func findInTerminal(_ sender: Any?) {
+        terminalManager.activeTerminal?.showSearch()
     }
 
     @objc private func clearWorkspace(_ sender: Any?) {

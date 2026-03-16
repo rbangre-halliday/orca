@@ -7,6 +7,7 @@ class TerminalView: NSView, NSTextInputClient {
     private var markedText = NSMutableAttributedString()
     private var keyTextAccumulator: [String]?
     private var trackingArea: NSTrackingArea?
+    private var searchBar: SearchBarView?
 
     /// Called when the shell process exits (from close_surface_cb).
     var onClose: (() -> Void)?
@@ -43,6 +44,58 @@ class TerminalView: NSView, NSTextInputClient {
 
     deinit {
         if let surface { ghostty_surface_free(surface) }
+    }
+
+    // MARK: - Search
+
+    func showSearch(needle: String? = nil) {
+        if searchBar == nil {
+            let bar = SearchBarView()
+            bar.onSearch = { [weak self] query in
+                self?.performSearch(query)
+            }
+            bar.onClose = { [weak self] in
+                self?.hideSearch()
+            }
+            addSubview(bar)
+            bar.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                bar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+                bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+                bar.widthAnchor.constraint(equalToConstant: 280),
+                bar.heightAnchor.constraint(equalToConstant: 36),
+            ])
+            searchBar = bar
+        }
+        searchBar?.isHidden = false
+        if let needle, !needle.isEmpty {
+            searchBar?.setText(needle)
+        }
+        window?.makeFirstResponder(searchBar?.searchField)
+    }
+
+    func hideSearch() {
+        searchBar?.isHidden = true
+        // Clear the search in ghostty
+        if let surface {
+            let action = "search:"
+            _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+        }
+        window?.makeFirstResponder(self)
+    }
+
+    func updateSearchCounts(total: Int?, selected: Int?) {
+        searchBar?.updateCounts(total: total, selected: selected)
+    }
+
+    private func performSearch(_ query: String) {
+        guard let surface else { return }
+        let action = "search:\(query)"
+        _ = ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+    }
+
+    var isSearchVisible: Bool {
+        searchBar?.isHidden == false
     }
 
     // MARK: - Copy / Paste
