@@ -1,0 +1,16 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserdata
+*.xcworkspace
+!Orca.xcworkspace
+
+# Frameworks (built artifacts)
+Frameworks/*.xcframework
+
+# macOS
+.DS_Store
+
+# Zig
+ghostty/zig-cache/
+ghostty/zig-out/
