@@ -20,6 +20,7 @@ private enum SidebarStyle {
     static let accentBarWidth: CGFloat = 2.5
     static let indentPerLevel: CGFloat = 18
     static let iconSize: CGFloat = 16
+    static let notifyColor = NSColor(red: 0.95, green: 0.25, blue: 0.25, alpha: 1.0)  // red
 }
 
 // MARK: - Pasteboard type
@@ -65,12 +66,14 @@ struct SidebarCallbacks {
     var onMove: ((UUID, UUID?, Int) -> Void)?
     var onReturnFocus: (() -> Void)?
     var onClearWorkspace: (() -> Void)?
+    var isWaitingForInput: ((UUID) -> Bool)?
 }
 
 // MARK: - Custom Row View
 
 class SidebarRowView: NSTableRowView {
     var isActiveTerminal = false
+    var isWaiting = false
     var nodeDepth: Int = 0
 
     override func drawSelection(in dirtyRect: NSRect) {
@@ -93,6 +96,15 @@ class SidebarRowView: NSTableRowView {
             let barPath = NSBezierPath(roundedRect: barRect, xRadius: 1.25, yRadius: 1.25)
             SidebarStyle.accentColor.setFill()
             barPath.fill()
+        }
+
+        // Waiting for input: orange dot on right
+        if isWaiting {
+            let dotSize: CGFloat = 7
+            let dotRect = NSRect(x: bounds.maxX - dotSize - 10, y: bounds.midY - dotSize / 2, width: dotSize, height: dotSize)
+            let dotPath = NSBezierPath(ovalIn: dotRect)
+            SidebarStyle.notifyColor.setFill()
+            dotPath.fill()
         }
 
         // Indent guides: draw vertical lines for each depth level
@@ -448,6 +460,7 @@ class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let rowView = SidebarRowView()
         if let nodeItem = item as? NodeItem {
             rowView.isActiveTerminal = (!nodeItem.node.isFolder && nodeItem.id == store.tree.activeTerminalID)
+            rowView.isWaiting = callbacks.isWaitingForInput?(nodeItem.id) ?? false
             rowView.nodeDepth = nodeItem.depth
         }
         return rowView

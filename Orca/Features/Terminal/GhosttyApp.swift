@@ -5,6 +5,10 @@ import GhosttyKit
 class GhosttyApp {
     private(set) var app: ghostty_app_t?
 
+    /// Split action callbacks — wired by AppDelegate.
+    var onNewSplit: ((TerminalView, ghostty_action_split_direction_e) -> Void)?
+    var onGotoSplit: ((TerminalView, ghostty_action_goto_split_e) -> Void)?
+
     init() {
         // Build config
         guard let config = ghostty_config_new() else { return }
@@ -80,9 +84,33 @@ class GhosttyApp {
     ) -> Bool {
         switch action.tag {
         case GHOSTTY_ACTION_NEW_WINDOW,
-             GHOSTTY_ACTION_NEW_TAB,
-             GHOSTTY_ACTION_NEW_SPLIT:
-            // Ignore for now — single terminal
+             GHOSTTY_ACTION_NEW_TAB:
+            return true
+
+        case GHOSTTY_ACTION_NEW_SPLIT:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface) {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                let direction = action.action.new_split
+                let appUD = ghostty_app_userdata(app!)
+                let me = Unmanaged<GhosttyApp>.fromOpaque(appUD!).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    me.onNewSplit?(view, direction)
+                }
+            }
+            return true
+
+        case GHOSTTY_ACTION_GOTO_SPLIT:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface) {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                let direction = action.action.goto_split
+                let appUD = ghostty_app_userdata(app!)
+                let me = Unmanaged<GhosttyApp>.fromOpaque(appUD!).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    me.onGotoSplit?(view, direction)
+                }
+            }
             return true
 
         case GHOSTTY_ACTION_RENDER:
@@ -102,6 +130,38 @@ class GhosttyApp {
                 let str = String(cString: title)
                 DispatchQueue.main.async {
                     view.onTitleChange?(str)
+                }
+            }
+            return true
+
+        case GHOSTTY_ACTION_PWD:
+            if target.tag == GHOSTTY_TARGET_SURFACE,
+               let surfaceUD = ghostty_surface_userdata(target.target.surface),
+               let pwd = action.action.pwd.pwd {
+                let view = Unmanaged<TerminalView>.fromOpaque(surfaceUD).takeUnretainedValue()
+                var str = String(cString: pwd)
+                // Ghostty shell integration sends kitty-shell-cwd://HOST/PATH
+                if str.hasPrefix("kitty-shell-cwd://") {
+                    str = String(str.dropFirst("kitty-shell-cwd://".count))
+                    if let slashIdx = str.firstIndex(of: "/") {
+                        str = String(str[slashIdx...])
+                    }
+                }
+                // OSC 7 standard sends file://HOST/PATH
+                else if str.hasPrefix("file://") {
+                    if let url = URL(string: str) {
+                        str = url.path
+                    } else {
+                        str = String(str.dropFirst(7))
+                        if let slashIdx = str.firstIndex(of: "/") {
+                            str = String(str[slashIdx...])
+                        }
+                    }
+                }
+                if !str.isEmpty {
+                    DispatchQueue.main.async {
+                        view.currentWorkingDirectory = str
+                    }
                 }
             }
             return true

@@ -15,20 +15,45 @@ class TerminalView: NSView, NSTextInputClient {
     /// Called when the shell sets its title (from action_cb SET_TITLE).
     var onTitleChange: ((String) -> Void)?
 
-    init(ghosttyApp: GhosttyApp, frame: NSRect) {
+    /// Called when this terminal becomes the focused responder.
+    var onFocus: (() -> Void)?
+
+    /// The last reported working directory for this terminal.
+    var currentWorkingDirectory: String?
+
+    /// Get the cwd — returns the last reported directory from OSC 7.
+    func detectWorkingDirectory() -> String? {
+        if let cwd = currentWorkingDirectory, !cwd.isEmpty { return cwd }
+        return nil
+    }
+
+    init(ghosttyApp: GhosttyApp, frame: NSRect, workingDirectory: String? = nil) {
         super.init(frame: frame)
 
         guard let app = ghosttyApp.app else { return }
 
-        // Create surface config
+        // Inject a tiny chpwd hook so zsh/bash report cwd changes via OSC 7.
+        // This runs once at shell start, invisible to the user.
+        let cwdHook = "eval 'chpwd(){ printf \"\\e]7;file://%s%s\\e\\\\\" \"$HOST\" \"$PWD\" };chpwd' 2>/dev/null;clear\n"
+
         var surfaceCfg = ghostty_surface_config_new()
         surfaceCfg.platform_tag = GHOSTTY_PLATFORM_MACOS
         surfaceCfg.platform.macos.nsview = Unmanaged.passUnretained(self).toOpaque()
         surfaceCfg.userdata = Unmanaged.passUnretained(self).toOpaque()
         surfaceCfg.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2.0)
-        surfaceCfg.font_size = 0 // use config default
 
-        self.surface = ghostty_surface_new(app, &surfaceCfg)
+        // Use closures to keep C strings alive through ghostty_surface_new
+        cwdHook.withCString { hookPtr in
+            surfaceCfg.initial_input = hookPtr
+            if let dir = workingDirectory {
+                dir.withCString { dirPtr in
+                    surfaceCfg.working_directory = dirPtr
+                    self.surface = ghostty_surface_new(app, &surfaceCfg)
+                }
+            } else {
+                self.surface = ghostty_surface_new(app, &surfaceCfg)
+            }
+        }
 
         wantsLayer = true
         layer?.isOpaque = true
@@ -177,6 +202,7 @@ class TerminalView: NSView, NSTextInputClient {
         let result = super.becomeFirstResponder()
         if result, let surface {
             ghostty_surface_set_focus(surface, true)
+            onFocus?()
         }
         return result
     }

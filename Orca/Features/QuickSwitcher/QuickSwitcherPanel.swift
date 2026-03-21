@@ -195,7 +195,7 @@ class QuickSwitcherOverlay: NSView {
     private func installEventMonitor() {
         removeEventMonitor()
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, !self.isHidden else { return event }
+            guard let self, !self.isHidden, self.superview != nil else { return event }
             switch event.keyCode {
             case 0x7E: self.moveSelection(-1); return nil       // Up
             case 0x7D: self.moveSelection(1); return nil        // Down

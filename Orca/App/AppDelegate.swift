@@ -1,4 +1,5 @@
 import Cocoa
+import GhosttyKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
@@ -74,6 +75,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.sidebarController.reload()
         }
 
+        // Wire split pane callbacks
+        ghosttyApp.onNewSplit = { [weak self] terminal, direction in
+            self?.terminalManager.splitTerminal(terminal, direction: direction)
+        }
+        ghosttyApp.onGotoSplit = { [weak self] terminal, direction in
+            self?.terminalManager.gotoSplit(from: terminal, direction: direction)
+        }
+
         // Wire sidebar callbacks
         sidebarController.callbacks = SidebarCallbacks(
             onSelect: { [weak self] id in
@@ -102,6 +111,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onClearWorkspace: { [weak self] in
                 self?.terminalManager.clearWorkspace()
+            },
+            isWaitingForInput: { [weak self] id in
+                self?.terminalManager.waitingForInput.contains(id) ?? false
             }
         )
         sidebarController.outlineView.callbacks = sidebarController.callbacks
@@ -183,6 +195,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(.separator())
         viewMenu.addItem(withTitle: "Focus Sidebar", action: #selector(focusSidebar(_:)), keyEquivalent: "1")
         viewMenu.addItem(withTitle: "Focus Terminal", action: #selector(focusTerminal(_:)), keyEquivalent: "2")
+        viewMenu.addItem(.separator())
+
+        let splitLeft = NSMenuItem(title: "Focus Split Left", action: #selector(gotoSplitLeft(_:)), keyEquivalent: "h")
+        let splitDown = NSMenuItem(title: "Focus Split Down", action: #selector(gotoSplitDown(_:)), keyEquivalent: "j")
+        let splitUp = NSMenuItem(title: "Focus Split Up", action: #selector(gotoSplitUp(_:)), keyEquivalent: "k")
+        let splitRight = NSMenuItem(title: "Focus Split Right", action: #selector(gotoSplitRight(_:)), keyEquivalent: "l")
+        viewMenu.addItem(splitLeft)
+        viewMenu.addItem(splitDown)
+        viewMenu.addItem(splitUp)
+        viewMenu.addItem(splitRight)
+
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
@@ -221,11 +244,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Actions
 
     @objc private func newTerminal(_ sender: Any?) {
+        let sidebarHadFocus = window.firstResponder === sidebarController.outlineView
         let folderID = sidebarController.contextFolderID()
         let id = terminalManager.createTerminal(inFolder: folderID)
-        sidebarController.ensureVisible(id: id)
-        sidebarController.selectNode(id: id)
-        sidebarController.focus()
+        // Wait for async sidebar reload to complete, then select and focus
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.sidebarController.ensureVisible(id: id)
+            self.sidebarController.selectNode(id: id)
+            if sidebarHadFocus {
+                self.sidebarController.focus()
+            } else {
+                self.terminalManager.focusTerminal()
+            }
+        }
     }
 
     @objc private func newFolder(_ sender: Any?) {
@@ -265,6 +297,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func focusTerminal(_ sender: Any?) {
         terminalManager.focusTerminal()
+    }
+
+    @objc private func gotoSplitLeft(_ sender: Any?) {
+        guard let active = terminalManager.activeTerminal else { return }
+        terminalManager.gotoSplit(from: active, direction: GHOSTTY_GOTO_SPLIT_LEFT)
+    }
+
+    @objc private func gotoSplitDown(_ sender: Any?) {
+        guard let active = terminalManager.activeTerminal else { return }
+        terminalManager.gotoSplit(from: active, direction: GHOSTTY_GOTO_SPLIT_DOWN)
+    }
+
+    @objc private func gotoSplitUp(_ sender: Any?) {
+        guard let active = terminalManager.activeTerminal else { return }
+        terminalManager.gotoSplit(from: active, direction: GHOSTTY_GOTO_SPLIT_UP)
+    }
+
+    @objc private func gotoSplitRight(_ sender: Any?) {
+        guard let active = terminalManager.activeTerminal else { return }
+        terminalManager.gotoSplit(from: active, direction: GHOSTTY_GOTO_SPLIT_RIGHT)
     }
 
     @objc private func showQuickSwitcher(_ sender: Any?) {
