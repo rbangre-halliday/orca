@@ -104,9 +104,15 @@ class SplitContainer: NSObject, NSSplitViewDelegate {
 
     // MARK: - Remove
 
+    /// Release every surface in this container.
+    func closeAll() {
+        allTerminals().forEach { $0.closeSurface() }
+    }
+
     /// Remove a terminal from the split tree. Returns true if the container is now empty.
     @discardableResult
     func remove(terminal: TerminalView) -> Bool {
+        terminal.closeSurface()
         terminal.removeFromSuperview()
         if case .leaf(let tv) = root, tv === terminal {
             return true // container is empty

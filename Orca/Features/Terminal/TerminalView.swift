@@ -67,8 +67,17 @@ class TerminalView: NSView, NSTextInputClient {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// Release the PTY and terminal surface. Idempotent, so it is safe on every close path.
+    /// The child process only receives SIGHUP once the surface is freed, so this must never
+    /// depend on ARC deallocation timing — callers free explicitly and `deinit` is a backstop.
+    func closeSurface() {
+        guard let surface else { return }
+        ghostty_surface_free(surface)
+        self.surface = nil
+    }
+
     deinit {
-        if let surface { ghostty_surface_free(surface) }
+        closeSurface()
     }
 
     // MARK: - Search

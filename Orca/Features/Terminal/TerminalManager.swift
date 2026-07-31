@@ -76,8 +76,9 @@ class TerminalManager {
         let frame = terminalContainer.bounds
         let view = makeTerminalView(frame: frame)
 
-        view.onClose = { [weak self] in
-            self?.handleTerminalClose(sidebarID: id, terminal: view)
+        view.onClose = { [weak self, weak view] in
+            guard let self, let view else { return }
+            self.handleTerminalClose(sidebarID: id, terminal: view)
         }
 
         let container = SplitContainer(terminal: view)
@@ -216,6 +217,16 @@ class TerminalManager {
 
     // MARK: - Close
 
+    /// Sole teardown path for a container: frees PTYs, detaches views, drops ownership and
+    /// per-terminal state. Every close path routes here so no route can leak a live process.
+    private func discardContainer(id: UUID) {
+        guard let container = splitContainers.removeValue(forKey: id) else { return }
+        container.closeAll()
+        container.rootView.removeFromSuperview()
+        waitingForInput.remove(id)
+        wasBusy.remove(id)
+    }
+
     /// Handle close of a terminal that's the sole terminal in a sidebar entry.
     private func handleTerminalClose(sidebarID: UUID, terminal: TerminalView) {
         // If this entry has splits, close just this pane
@@ -271,9 +282,7 @@ class TerminalManager {
             nextID = activeID
         }
 
-        if let container = splitContainers.removeValue(forKey: id) {
-            container.rootView.removeFromSuperview()
-        }
+        discardContainer(id: id)
         store.removeNode(id: id)
 
         if splitContainers.isEmpty {
@@ -305,9 +314,7 @@ class TerminalManager {
             let needsSwitch = toRemove.contains(where: { $0 == activeID })
 
             for tid in toRemove {
-                if let container = splitContainers.removeValue(forKey: tid) {
-                    container.rootView.removeFromSuperview()
-                }
+                discardContainer(id: tid)
             }
             store.removeNode(id: id)
 
@@ -331,10 +338,9 @@ class TerminalManager {
     }
 
     func clearWorkspace() {
-        for (_, container) in splitContainers {
-            container.rootView.removeFromSuperview()
+        for id in Array(splitContainers.keys) {
+            discardContainer(id: id)
         }
-        splitContainers.removeAll()
         activeID = nil
         store.clearWorkspace()
 
